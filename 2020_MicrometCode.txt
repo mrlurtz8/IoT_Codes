@@ -1,0 +1,223 @@
+// This #include statement was automatically added by the Particle IDE.
+#include <Adafruit_MLX90614.h>
+
+// This #include statement was automatically added by the Particle IDE.
+#include <ThingSpeak.h>
+
+// This #include statement was automatically added by the Particle IDE.
+#include <adafruit-sht31.h>
+
+
+//Wire.h library is not required on the particle platform...
+
+
+ 
+//NOTE:   10000 * 6 = 1 minute delay
+
+#include "stdlib.h"
+#include "ctype.h"
+#include "math.h"
+#include "string.h"
+#include "time.h"
+
+#include "bitset"
+#include "deque"
+#include "list"
+#include "map"
+#include "set"
+
+// New code for adding power control to robot
+SYSTEM_MODE(MANUAL);
+SYSTEM_THREAD(ENABLED);
+
+long sleepTime = 15 * 60    ;// (# Minutes * 60 seconds)
+long connectionFail =    5 * 60000 ;     // (# Minutes * 60,000 ms ) During the Connection Process, 
+//Boron will stop trying after this amount of time and Sleep if un-successful.
+
+inline void softDelay(uint32_t t) {
+  for (uint32_t ms = millis(); millis() - ms < t; Particle.process());  //  safer than a delay()
+}
+
+//These names may need to differ based upon how many sensors used...
+Adafruit_SHT31 sht31 = Adafruit_SHT31();
+const int moisture_pin = A1; //this is wear my sensor is plugged into
+int dryreading = 100; // soil sensor reading in air, mV   (SoilWatch)
+int wetreading = 2900; // soi sensor reading in water, mV
+
+const int moisture_pin2 = A2; //this is wear my sensor is plugged into
+int dryreading2 = 100; // soil sensor reading in air, mV   (SoilWatch)
+int wetreading2 = 2900; // soi sensor reading in water, mV
+
+
+/////////////////////////////////////////////////////////////////////////////////////
+Adafruit_MLX90614 mlx1 = Adafruit_MLX90614();
+/////////////////////////////////////////////////////////////////////////////////////
+
+
+
+void setup() {
+
+  Serial.begin(9600);
+  
+   Serial.println("Adafruit MLX90614 test");
+   mlx1.begin();
+   
+  Serial.println("SHT31 test");
+ if (! sht31.begin(0x44)) {   // Set to 0x45 for alternate i2c addr
+  Serial.println("Couldn't find SHT31");
+    while (1) delay(1);
+    } 
+
+}
+
+const int numsamples = 100; 
+int rawValue[numsamples];
+float  medianValue;
+
+/////////////////////////////////////////////////////////////////////////////////////
+int rawValue2[numsamples];
+float  medianValue2;
+/////////////////////////////////////////////////////////////////////////////////////
+
+char msg[256];       // Character array for the snprintf Publish Payload
+
+
+void loop() {
+    
+    //Can I do sleepTime?
+    System.sleep({},{}, SLEEP_NETWORK_STANDBY, sleepTime);
+    
+     softDelay(2000);
+  if ( !Particle.connected() ) {
+    Cellular.on();
+    softDelay(2000);
+    Particle.connect();
+    softDelay(2000);   //
+  }
+    
+ //  Limit the time spent for the Connection attempt to preserve Battery
+  if (waitFor(Particle.connected, connectionFail)) {    // Will continue once connected, or bail-out after "connectionFail" time-limit
+    softDelay(5000);
+    Particle.publish("DeBug", "Boron Awake", PUBLIC, NO_ACK);
+    softDelay(5000);
+  }
+  
+    for (int i=0; i< numsamples; i++)  {      // take 100 readings and store in array
+    rawValue[i] = analogRead(moisture_pin); 
+    delay(1);
+  }
+  
+  softDelay(2000);
+  
+    for (int i=0; i< numsamples; i++)  {      // take 100 readings and store in array
+    rawValue2[i] = analogRead(moisture_pin2);  //This needs to be from a different moisture pin i.e. #2
+    delay(1);
+  }
+  
+   softDelay(2000);
+  
+  qsort(rawValue, numsamples, sizeof(float), compare); // sort data array from low to high
+  medianValue=0.0;
+  for (int i=0; i< 10; i++) 
+    medianValue+= rawValue[i+45] ; // avg  10 readings in center of ranked values
+  medianValue=medianValue/10.0;
+  
+  softDelay(2000);
+  
+  /////////////////////////////////////////////////////////////////////////////////////
+    qsort(rawValue2, numsamples, sizeof(float), compare); // sort data array from low to high
+  medianValue2=0.0;
+  for (int i=0; i< 10; i++) 
+    medianValue2+= rawValue2[i+45] ; // avg  10 readings in center of ranked values
+  medianValue2=medianValue2/10.0;
+  
+  softDelay(2000);
+  /////////////////////////////////////////////////////////////////////////////////////
+ 
+    //Corrected from Piotr's email
+  int voltage_mv = medianValue * (3.3 / 4096.0)*1000.0;  // calc millivolts
+  float sensorA_map = map(voltage_mv, wetreading, dryreading, 100, 0);  // map voltage to % response
+  
+  
+    softDelay(2000);
+  //Should the wet and dry readings also have different variable names...
+  /////////////////////////////////////////////////////////////////////////////////////
+  int voltage_mv2 = medianValue2 * (3.3 / 4096.0)*1000.0;  // calc millivolts
+  float sensorA_map2 = map(voltage_mv2, wetreading2, dryreading2, 100, 0);  // map voltage to % response
+  /////////////////////////////////////////////////////////////////////////////////////
+  
+  softDelay(2000);
+  
+  float t = sht31.readTemperature();
+  float h = sht31.readHumidity();
+  float tF = (t* 9) /5 + 32;
+  
+   ///////////////////////////////////////////////////////////////////////////////////// 
+  
+  softDelay(2000);
+  
+  float tCamb = mlx1.readAmbientTempC();
+  float tCobj = mlx1.readObjectTempC();
+ 
+ 
+    
+  softDelay(2000);
+    // Perform whatever Actions you need HERE to update the float values for field1, field2, etc
+ /////////////////////////////////////////////////////////////////////////////////////    
+   float field1=tF;
+   float field2=h;
+   
+     softDelay(2000);
+   
+   float field3=voltage_mv;
+   float field4=sensorA_map;
+   
+     softDelay(2000);
+
+  float field5=voltage_mv2;
+  float field6=sensorA_map2;
+   
+     softDelay(2000);
+   
+   float field7=tCamb;
+   float field8=tCobj;
+/////////////////////////////////////////////////////////////////////////////////////
+
+//Send Particle Message to Thingspeak
+    
+    //snprintf(msg, sizeof(msg),
+    // ThingSpeak Field #1  , ThingSpeak Field #2   , 
+       //"{\"1\":\"%.2f\"  ,  \"2\":\"%.2f\"  ,  \"3\":\"%.2f\"  , \"4\":\"%.2f\"}",
+       //field1  , field2 , field3, field4) ;
+       
+/////////////////////////////////////////////////////////////////////////////////////       
+    // snprintf(msg, sizeof(msg),
+    // //ThingSpeak Field #1  , ThingSpeak Field #2   , 
+    //   "{\"1\":\"%.2f\"  ,  \"2\":\"%.2f\"  ,  \"3\":\"%.2f\"  , \"4\":\"%.2f\" , \"5\":\"%.2f\" , \"6\":\"%.2f\"}",
+    //   field1  , field2 , field3 , field4 , field5 , field6) ;
+/////////////////////////////////////////////////////////////////////////////////////
+
+  softDelay(2000);
+
+    snprintf(msg, sizeof(msg),
+    // ThingSpeak Field #1  , ThingSpeak Field #2   , 
+      "{\"1\":\"%.2f\"  ,  \"2\":\"%.2f\"  ,  \"3\":\"%.2f\"  , \"4\":\"%.2f\" , \"5\":\"%.2f\" , \"6\":\"%.2f\" , \"7\":\"%.2f\" , \"8\":\"%.2f\"}",
+      field1  , field2 , field3 , field4 , field5 , field6 , field7 , field8) ;
+/////////////////////////////////////////////////////////////////////////////////////
+  softDelay(2000);
+
+   Particle.publish("NAME OF CHANNEL IN THINGSPEAK", msg, PRIVATE, NO_ACK);  // perform the Publish
+
+softDelay(10000);
+
+
+} // End for LOOP()
+
+// function for median filter
+  int compare (const void * a, const void * b) {  
+     float fa = *(const float*) a;
+     float fb = *(const float*) b;
+     return (fa > fb) - (fa < fb);
+  }
+  
+
